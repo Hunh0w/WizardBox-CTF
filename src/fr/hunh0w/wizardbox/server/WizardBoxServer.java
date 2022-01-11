@@ -5,10 +5,15 @@ import fr.hunh0w.wizardbox.server.objects.WizardCTF;
 import fr.hunh0w.wizardbox.server.objects.WizardWebSocket;
 import fr.hunh0w.wizardbox.server.utils.VarUtils;
 import org.java_websocket.WebSocket;
+import org.java_websocket.WebSocketImpl;
 import org.java_websocket.handshake.ClientHandshake;
 import org.java_websocket.server.WebSocketServer;
 
 import java.net.InetSocketAddress;
+import java.nio.channels.ByteChannel;
+import java.nio.channels.SocketChannel;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 
 public class WizardBoxServer extends WebSocketServer {
 
@@ -56,6 +61,7 @@ public class WizardBoxServer extends WebSocketServer {
                 return;
             }
             wbsock.setCTF(ctf);
+            ctf.linkCTF(ws);
             ws.send("CTF_LINKED::"+ctf.getName());
         }else if(request.equalsIgnoreCase("CMD")){
             WizardWebSocket wbsock = WizardWebSocket.getWizardWebSock(ws);
@@ -67,12 +73,9 @@ public class WizardBoxServer extends WebSocketServer {
                 ws.send("NO_CTF");
                 return;
             }
-            String resp = wbsock.getCTF().exec(data, ws);
-            if(resp == null){
-                ws.send("NO_RESPONSE");
-                return;
-            }
-            ws.send("BASE64::"+resp);
+            System.out.println("Executing..");
+            data = new String(Base64.getDecoder().decode(data));
+            wbsock.getCTF().exec(data, ws);
         }
     }
 
