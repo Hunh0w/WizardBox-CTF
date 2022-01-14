@@ -1,19 +1,11 @@
 package fr.hunh0w.wizardbox.server.objects;
 
-import fr.hunh0w.wizardbox.Main;
 import org.java_websocket.WebSocket;
-import org.java_websocket.WebSocketImpl;
-import org.java_websocket.client.WebSocketClient;
 
 import java.io.*;
-import java.net.Socket;
-import java.nio.channels.ByteChannel;
-import java.nio.channels.SelectableChannel;
-import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Base64;
-import java.util.Date;
 import java.util.Scanner;
 
 public class WizardCTF {
@@ -28,6 +20,8 @@ public class WizardCTF {
     private Process proc;
     private Scanner scanner;
     private Thread threadProc;
+
+    private boolean sendoutput = true;
 
     public WizardCTF(int id, String start_command, String name, String flag) {
         this.id = id;
@@ -96,39 +90,35 @@ public class WizardCTF {
         }
     }
 
-    private void regenProc(){
-        if(threadProc != null) {threadProc.interrupt();}
-        if(proc != null) proc.destroyForcibly();
+    private synchronized void regenProc(){
+        if(threadProc != null) {threadProc.interrupt(); threadProc = null;}
+        if(proc != null) {proc.destroyForcibly(); proc = null;}
         try{
             proc = new ProcessBuilder()
                     .command("/bin/bash")
                     .redirectErrorStream(true)
                     .directory(new File("/")).start();
-            threadProc = new Thread(new Runnable() { // READER THREAD
-                @Override
-                public void run() {
-                    try{
-                        while(true){
-                            scanner = new Scanner(proc.getInputStream());
-                            while(scanner.hasNextLine()){
-                                String line = scanner.nextLine();
-                                if(line.toUpperCase().contains("EXITPROCESS2097426789297647246298")){
-                                    line = line.replaceAll("EXITPROCESS2097426789297647246298", "");
-                                    if(!line.isEmpty())
-                                        sendToAll("CMDRESP::"+Base64.getEncoder().encodeToString(line.getBytes(StandardCharsets.UTF_8)));
-                                    sendToAll("CMDFIN");
-                                    break;
-                                }
-                                if(!line.isEmpty())
-                                    sendToAll("CMDRESP::"+Base64.getEncoder().encodeToString(line.getBytes(StandardCharsets.UTF_8)));
+            threadProc = new Thread(() -> {
+                try{
+                    while(true){
+                        if(proc == null) return;
+                        scanner = new Scanner(proc.getInputStream());
+                        while(scanner.hasNextLine()){
+                            String line = scanner.nextLine();
+                            if(!sendoutput) continue;
+                            if(line.toUpperCase().contains("EXITPROCESS2097426789297647246298")){
+                                if(line.toLowerCase().contains("echo")) continue;
+                                sendToAll("CMDFIN");
+                                break;
                             }
+                            if(!line.isEmpty())
+                                sendToAll("CMDRESP::"+Base64.getEncoder().encodeToString(line.getBytes(StandardCharsets.UTF_8)));
                         }
-                    }catch(Exception ex){
-
                     }
-                }
+                }catch(Exception ex){}
             });
             threadProc.start();
+            sendToAll("CMDFIN");
         }catch(Exception ex){
             ex.printStackTrace();
         }
@@ -136,35 +126,31 @@ public class WizardCTF {
     }
 
 
-    public void exec(String cmd, WebSocket sock){
+    public synchronized void exec(String cmd, WebSocket sock){
         try{
-            /*
-            WebSocketImpl wsi = (WebSocketImpl) sock;
-            ByteChannel channel = wsi.channel;
-            if(!(channel instanceof SocketChannel)){
-                System.out.println("no socket channel");
-                return;
-            }
-            Socket socket = ((SocketChannel)channel).socket();
-            */
+
+            BufferedWriter osw = new BufferedWriter(new OutputStreamWriter(proc.getOutputStream()));
             if(cmd.equalsIgnoreCase("\003")){
+                sendoutput = false;
                 regenProc();
-                System.out.println("SIGINT");
+                return;
             }else {
-                proc.outputWriter().write(cmd);
-                proc.outputWriter().newLine();
-                proc.outputWriter().flush();
+                sendoutput = true;
+                osw.write(cmd);
+                osw.newLine();
+                osw.flush();
             }
 
+            osw.write("echo EXITPROCESS2097426789297647246298");
+            osw.newLine();
+            osw.flush();
 
-            proc.outputWriter().write("echo \"EXITPROCESS2097426789297647246298\"");
-            proc.outputWriter().newLine();
-            proc.outputWriter().flush();
             System.out.println("EXECUTE: "+cmd);
         }catch(Exception ex){
             ex.printStackTrace();
             String b64line = Base64.getEncoder().encodeToString(ex.getMessage().getBytes(StandardCharsets.UTF_8));
             sock.send("CMDRESP::"+b64line);
+            sock.send("CMDFIN");
         }
     }
 

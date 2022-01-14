@@ -18,29 +18,26 @@ public class Main {
     public static ArrayList<WizardLinkThread> clients = new ArrayList<>();
 
     public static void main(String[] args) {
-        wss = new WizardBoxServer(3000);
+        wss = new WizardBoxServer(8080);
         wss.start();
 
         new WizardCTF(1, "/bin/bash", "TEST", "FLAG289");
 
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    server = new ServerSocket(3787, 0, InetAddress.getLoopbackAddress());
-                    while(true){
-                        while(clients.size() > 20){
-                            System.out.println("[WB-Tunnel] Trop de clients : Rejet des connexions");
-                            Thread.sleep(2000);
-                        }
-                        WizardSocket sock = new WizardSocket(Main.server.accept());
-                        WizardLinkThread wlt = new WizardLinkThread(sock);
-                        clients.add(wlt);
-                        new Thread(wlt).start();
+        new Thread(() -> {
+            try {
+                server = new ServerSocket(3787, 0, InetAddress.getLoopbackAddress());
+                while(true){
+                    while(clients.size() > 20){
+                        System.out.println("[WB-Tunnel] Trop de clients : Rejet des connexions");
+                        Thread.sleep(2000);
                     }
-                } catch (Exception e) {
-                    e.printStackTrace();
+                    WizardSocket sock = new WizardSocket(Main.server.accept());
+                    WizardLinkThread wlt = new WizardLinkThread(sock);
+                    clients.add(wlt);
+                    new Thread(wlt).start();
                 }
+            } catch (Exception e) {
+                e.printStackTrace();
             }
         }).start();
     }
